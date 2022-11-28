@@ -1,0 +1,110 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * Copyright (C) 2022 HiFiBerry Deutschland GmbH
+ * Author: Joerg Schambacher <joerg@hifiberry.com>
+ *
+ */
+
+/ {
+	ext_osc_22m: ext-osc-22m {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <22579200>;
+		clock-output-names = "sclk0";
+	};
+
+	ext_osc_24m: ext-osc-24m {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <24576000>;
+		clock-output-names = "sclk1";
+	};
+
+	reg_3v3_vext: regulator-3v3-vext {
+		compatible = "regulator-fixed";
+		regulator-name = "3V3_VEXT";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+	};
+
+	sound-dacplusadcpro {
+		compatible = "hifiberry,imx-audio-dacplusadcpro";
+		model = "dacplusadcpro";
+		audio-cpu = <&sai2>;
+		audio-codec = <&pcm512x &pcm186x>;
+		format = "i2s";
+		audio-widgets =
+			"Line", "Left Line Out Jack",
+			"Line", "Right Line Out Jack";
+		audio-routing =
+			"Left Line Out Jack", "OUTL",
+			"Right Line Out Jack", "OUTR";
+		bitclock-master = <&pcm512x>;
+		frame-master = <&pcm512x>;
+		dac,24db_digital_gain;
+		dac,led_status;
+		status = "okay";
+	};
+
+};
+
+&i2c4 {
+	pinctrl-names = "default","gpio";
+	pinctrl-0 = <&pinctrl_i2c4>;
+	pinctrl-1 = <&pinctrl_i2c4_gpio>;
+	sda-gpios = <&gpio5 21 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+	scl-gpios = <&gpio5 20 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+	clock-frequency = <400000>;
+	status = "okay";
+
+	pcm512x: pcm512x@4d {
+		compatible = "ti,pcm5122";
+		reg = <0x4d>;
+		clocks = <&ext_osc_22m>, <&ext_osc_24m>;
+		clock-names = "sclk0", "sclk1";
+		status = "okay";
+//		status = "disabled";
+	};
+
+	pcm186x: pcm186x@4a {
+		compatible = "ti,pcm1863";
+		reg = <0x4a>;
+		avdd-supply = <&reg_3v3_vext>;
+		dvdd-supply = <&reg_3v3_vext>;
+		iovdd-supply = <&reg_3v3_vext>;
+		clocks = <&ext_osc_22m>, <&ext_osc_24m>;
+		clock-names = "sclk0", "sclk1";
+		status = "okay";
+	};
+
+};
+
+&sai2 {
+	#sound-dai-cells = <0>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_sai2>;
+	/* RX synchronised to TX */
+//	rx,sync-mode = < 1 >;
+
+	/* Hifiberry card is master */
+//	rx,slave_mode;
+//	tx,slave_mode;
+	status = "okay";
+};
+
+&sdma2 {
+	status = "okay";
+};
+
+&iomuxc {
+
+	pinctrl_sai2: sai2grp {
+		fsl,pins = <
+			MX8MN_IOMUXC_SAI2_TXC_SAI2_TX_BCLK	0xD6
+			MX8MN_IOMUXC_SAI2_RXD0_SAI2_RX_DATA0	0xD6
+			MX8MN_IOMUXC_SAI2_TXFS_SAI2_TX_SYNC	0xD6
+			MX8MN_IOMUXC_SAI2_TXD0_SAI2_TX_DATA0	0xD6
+		>;
+	};
+
+};
