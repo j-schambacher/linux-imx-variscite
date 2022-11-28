@@ -9,6 +9,12 @@
 #ifndef _SND_SOC_PCM512X
 #define _SND_SOC_PCM512X
 
+enum pcm512x_sclk_src {
+	PCM512x_SYSCLK_MCLK1,
+	PCM512x_SYSCLK_MCLK2,
+	PCM512x_SYSCLK_NOCLK,
+};
+
 #include <linux/pm.h>
 #include <linux/regmap.h>
 
