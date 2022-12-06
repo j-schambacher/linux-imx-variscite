@@ -546,6 +546,38 @@ static struct snd_soc_dai_link imx_dacplusadc_dai[] = {
 	},
 };
 
+/* aux device for optional headphone amp */
+static struct snd_soc_aux_dev hifiberry_dacplusadcpro_aux_devs[] = {
+	{
+		.dlc = {
+			.name = "tpa6130a2.3-0060",
+		},
+	},
+};
+
+static int hb_hp_detect(void)
+{
+	struct i2c_adapter *adap = i2c_get_adapter(3);
+	int ret;
+	struct i2c_client tpa_i2c_client = {
+		.addr = 0x60,
+		.adapter = adap,
+	};
+
+	if (!adap)
+		return -EPROBE_DEFER;	/* I2C module not yet available */
+
+	ret = i2c_smbus_read_byte(&tpa_i2c_client) >= 0;
+	i2c_put_adapter(adap);
+	return ret;
+};
+
+static struct property tpa_enable_prop = {
+	       .name = "status",
+	       .length = 4 + 1, /* length 'okay' + 1 */
+	       .value = "okay",
+	};
+
 static int imx_dacplusadc_probe(struct platform_device *pdev)
 {
 	struct device_node *bitclkmaster, *framemaster = NULL;
@@ -557,6 +589,11 @@ static int imx_dacplusadc_probe(struct platform_device *pdev)
 	struct i2c_client *codec_dev_dac, *codec_dev_adc;
 	int ret;
 
+	struct device_node *tpa_node;
+	struct property *tpa_prop;
+	struct of_changeset ocs;
+	int len;
+
 	data = devm_kzalloc(&pdev->dev, sizeof(*data), GFP_KERNEL);
 	if (!data)
 		return -ENOMEM;
@@ -564,6 +601,37 @@ static int imx_dacplusadc_probe(struct platform_device *pdev)
 	comp = devm_kzalloc(&pdev->dev, 4 * sizeof(*comp), GFP_KERNEL);
 	if (!comp)
 		return -ENOMEM;
+
+	/* probe for head phone amp */
+	ret = hb_hp_detect();
+	if (ret < 0)
+		return ret;
+	if (ret) {
+		data->card.aux_dev = hifiberry_dacplusadcpro_aux_devs;
+		data->card.num_aux_devs =
+				ARRAY_SIZE(hifiberry_dacplusadcpro_aux_devs);
+		tpa_node = of_find_compatible_node(NULL, NULL, "ti,tpa6130a2");
+		tpa_prop = of_find_property(tpa_node, "status", &len);
+
+		if (strcmp((char *)tpa_prop->value, "okay")) {
+			/* and activate headphone using change_sets */
+			dev_info(&pdev->dev, "activating headphone amplifier");
+			of_changeset_init(&ocs);
+			ret = of_changeset_update_property(&ocs, tpa_node,
+							&tpa_enable_prop);
+			if (ret) {
+				dev_err(&pdev->dev,
+				"cannot activate headphone amplifier\n");
+				return -ENODEV;
+			}
+			ret = of_changeset_apply(&ocs);
+			if (ret) {
+				dev_err(&pdev->dev,
+				"cannot activate headphone amplifier\n");
+				return -ENODEV;
+			}
+		}
+	}
 
 	cpu_np = of_parse_phandle(np, "audio-cpu", 0);
 	if (!cpu_np) {
